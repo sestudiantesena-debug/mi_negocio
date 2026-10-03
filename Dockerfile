@@ -1,2 +1,2 @@
-FROM docker.io/evolutionapi/evolution-api:latest
+FROM condef5/evolution-api:latest
 EXPOSE 8080
