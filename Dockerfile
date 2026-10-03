@@ -1,2 +1,2 @@
-FROM docker.io/evolutionapi/evolution-api:v2.1.1
+FROM docker.io/evolutionapi/evolution-api:latest
 EXPOSE 8080
