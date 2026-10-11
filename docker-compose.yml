@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mi_negocio_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mi_negocio
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: mi_negocio_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  evolution-api:
+    image: evoapicloud/evolution-api:2.4.0-rc2
+    container_name: mi_negocio_evolution
+    environment:
+      - SERVER_PORT=8080
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-mi_negocio_key_123}
+      - CONFIG_SESSION_PHONE_CLIENT=mi_negocio
+      - CONFIG_SESSION_PHONE_NAME=mi_negocio
+      - DELIVERY_WEBHOOK_URL=http://backend:8000/webhook/evolution
+      - MESSAGES_WEBHOOK_URL=http://backend:8000/webhook/evolution
+      - CONNECTION_WEBHOOK_URL=http://backend:8000/webhook/evolution
+      - QRCODE_WEBHOOK_URL=http://backend:8000/webhook/evolution
+    ports:
+      - "8080:8080"
+    volumes:
+      - evolution_data:/evolution/instances
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mi_negocio_backend
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/mi_negocio
+      - REDIS_URL=redis://redis:6379/0
+      - EVOLUTION_API_URL=http://evolution-api:8080
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-mi_negocio_key_123}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - META_APP_ID=${META_APP_ID}
+      - META_APP_SECRET=${META_APP_SECRET}
+      - META_VERIFY_TOKEN=${META_VERIFY_TOKEN}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+      - FRONTEND_URL=http://localhost:3000
+      - ENVIRONMENT=development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: mi_negocio_frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+      - NEXT_PUBLIC_WHATSAPP_NUMBER=${NEXT_PUBLIC_WHATSAPP_NUMBER}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    command: npm run dev
+
+volumes:
+  postgres_data:
+  redis_data:
+  evolution_data:
